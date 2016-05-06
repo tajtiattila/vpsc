@@ -41,33 +41,33 @@ type crect struct {
 // this mutex to avoid problems during its call.
 var removeOverlapsMtx sync.Mutex
 
-func RemoveOverlaps(rects []Rect) {
+func RemoveOverlaps(rects Rectangles) {
 	if removeOverlaps == nil {
 		panic("vpsc.dll is not loaded")
 	}
-	if len(rects) == 0 {
+	if rects.Len() == 0 {
 		return
 	}
 
-	rcv := make([]crect, len(rects))
-	for i, n := range rects {
+	rcv := make([]crect, rects.Len())
+	for i := 0; i < rects.Len(); i++ {
 		rc := &rcv[i]
-		x0, y0, x1, y1 := n.Position()
+		x0, y0, x1, y1 := rects.Position(i)
 		rc.x0 = x0
-		rc.x1 = x1
 		rc.y0 = y0
+		rc.x1 = x1
 		rc.y1 = y1
-		rc.fixed = boolchar(n.Fixed())
-		rc.allow_overlap = boolchar(n.Overlap())
+		rc.fixed = boolchar(rects.Fixed(i))
+		rc.allow_overlap = boolchar(rects.AllowOverlap(i))
 	}
 
 	removeOverlapsMtx.Lock()
 	removeOverlaps.Call(uintptr(unsafe.Pointer(&rcv[0])), uintptr(len(rcv)))
 	removeOverlapsMtx.Unlock()
 
-	for i, n := range rects {
+	for i := 0; i < rects.Len(); i++ {
 		rc := &rcv[i]
-		n.SetPosition(rc.x0, rc.x1, rc.y0, rc.y1)
+		rects.SetPosition(i, rc.x0, rc.y0, rc.x1, rc.y1)
 	}
 }
 
