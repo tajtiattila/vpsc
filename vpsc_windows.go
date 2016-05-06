@@ -1,7 +1,6 @@
 package vpsc
 
 import (
-	"errors"
 	"log"
 	"sync"
 	"syscall"
@@ -9,23 +8,26 @@ import (
 )
 
 var (
-	xerr           error
 	removeOverlaps *syscall.Proc
 )
 
 func init() {
 	dll, err := syscall.LoadDLL("vpsc.dll")
 	if err != nil {
-		xerr = errors.New("could not load vpsc.dll")
-		log.Println(xerr)
+		log.Println("could not load vpsc.dll")
 		return
 	}
 
 	removeOverlaps, err = dll.FindProc("remove_overlaps")
 	if err != nil {
-		xerr = errors.New("remove_overlaps missing from vpsc.dll")
-		log.Println(xerr)
+		log.Println("remove_overlaps missing from vpsc.dll")
 	}
+}
+
+// Ready reports if the library was successfully loaded.
+// RemoveOverlaps panics if Ready() is false.
+func Ready() bool {
+	return removeOverlaps != nil
 }
 
 // must match windll/vpsc.h
@@ -39,18 +41,18 @@ type crect struct {
 // this mutex to avoid problems during its call.
 var removeOverlapsMtx sync.Mutex
 
-func RemoveOverlaps(nv []Node) error {
-	if xerr != nil {
-		return xerr
+func RemoveOverlaps(rects []Rect) {
+	if removeOverlaps == nil {
+		panic("vpsc.dll is not loaded")
 	}
-	if len(nv) == 0 {
-		return nil
+	if len(rects) == 0 {
+		return
 	}
 
-	rcv := make([]crect, len(nv))
-	for i, n := range nv {
+	rcv := make([]crect, len(rects))
+	for i, n := range rects {
 		rc := &rcv[i]
-		x0, x1, y0, y1 := n.Rect()
+		x0, y0, x1, y1 := n.Position()
 		rc.x0 = x0
 		rc.x1 = x1
 		rc.y0 = y0
@@ -63,12 +65,10 @@ func RemoveOverlaps(nv []Node) error {
 	removeOverlaps.Call(uintptr(unsafe.Pointer(&rcv[0])), uintptr(len(rcv)))
 	removeOverlapsMtx.Unlock()
 
-	for i, n := range nv {
+	for i, n := range rects {
 		rc := &rcv[i]
-		n.SetRect(rc.x0, rc.x1, rc.y0, rc.y1)
+		n.SetPosition(rc.x0, rc.x1, rc.y0, rc.y1)
 	}
-
-	return nil
 }
 
 func boolchar(b bool) uint8 {
